@@ -124,8 +124,16 @@ async def craw_yahoo_pre(symbols, export_path="./data/yahoo_premarket.parquet"):
         df = pa.table(df)
         pq.write_table(df, export_path)
         print('Done')
+        return df
         
-asyncio.run(craw_yahoo_pre(get_stocklist('tradingview_1'), "./data/yahoo_premarket.parquet"))
+df = asyncio.run(craw_yahoo_pre(get_stocklist('all'), "./data/yahoo_premarket.parquet"))
+
+df = pd.read_parquet("./data/yahoo_premarket.parquet")
+df = df[~df.symbol.duplicated()]
+df[df.symbol=='AAPL']
+engine = create_engine('postgresql+psycopg2://tradekit:yourpassword@127.0.0.1')
+df['timestamp'] = datetime.now()
+df.to_sql(name='tipranks_premarket',con=engine,if_exists='append',chunksize=25000,method='multi', index=True)
 print("--- %s seconds ---" % (time.time() - start_time))
 #df = pd.read_parquet("./data/yahoo_premarket.parquet")
 

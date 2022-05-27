@@ -19,11 +19,13 @@ async def get_stocktwits(session, url):
     async with session.get(url) as resp:
         pokemon = await resp.json()
         try:
+            print(pokemon)
             pokemon = pokemon['symbol']
             pokemon.pop('aliases')
             data = pd.DataFrame(pokemon.pop('price_data'), index=[0])
             #print(data)
             data2 = pd.DataFrame(pokemon, index=[0])
+            data2 = data2.drop('symbol', axis=1)
             #print(data2)
             pokemon = pd.concat([data, data2], axis=1)
             #print(pokemon)
@@ -44,18 +46,19 @@ async def main_stocktwits(stocklist, export_path):
             tasks.append(asyncio.ensure_future(get_stocktwits(session, url)))
 
         data = await asyncio.gather(*tasks)
-        df = pd.concat(data)
-        df['loadtime'] = int(time.time())
+        #df = pd.concat(data)
+        #df['loadtime'] = int(time.time())
 
         #df.to_csv(today+'_stocktwits.csv')
-        table = pa.Table.from_pandas(df)
-        pqwriter = pq.ParquetWriter(export_path, table.schema)
-        pqwriter.write_table(table)
-        pqwriter.close()
-        print('Done')
-        return df
+        #table = pa.Table.from_pandas(df)
+        #pqwriter = pq.ParquetWriter(export_path, table.schema)
+        #pqwriter.write_table(table)
+        #pqwriter.close()
+        #print('Done')
+        return data
 
 df = asyncio.run(main_stocktwits(get_stocklist('sp500'),export_path='./data/stocktwits_20220325.parquet'))
+
 print("--- %s seconds ---" % (time.time() - start_time))
 
 """ 

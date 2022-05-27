@@ -9,111 +9,144 @@ from utils.util import *
 from utils.util_clean import * 
 from datetime import datetime
 from datetime import timedelta
+from pangres import upsert
+from sqlalchemy import create_engine
+import argparse
+from asyncio_fetch_data import *
+import dbconfig as db 
 
-start_time = time.time()
+parser=argparse.ArgumentParser()
+parser.add_argument("days_history", type=int, help="How many days to pull history from")
+parser.add_argument("interval", type=str, help="Interval of data (1m, 30m, 1h, 1d, 1w)")
+parser.add_argument("stocks", type=str, help="Options: (all, sp500, nasdaq)")
+parser.add_argument("-t", "--tblname", type=str, help="Database tablename")
+parser.add_argument("-e","--exportpath", type=str, help="Path to export result as parquet")
+parser.add_argument("-p","--prep", type=str, help="Prepare Daily data")
+
+args=parser.parse_args()
+
+startdays = args.days_history
+interval = args.interval
+tblname = args.tblname
+tblname = tblname.replace(' ','')
+
+print(tblname)
+print(args.exportpath)
+
+if args.exportpath is None:
+    exportpath=None
+else: 
+    exportpath = args.exportpath
+stocks = args.stocks
+prep = args.prep
+
+if args.prep is None:
+    prep = False
+
+print(args)
+
+startdays = 300
+interval = '1d'
+tblname = 'yahoo_daily'
+exportpath = None
+stocks = 'all'
+prep = None
+# export_path = 'yahoo_daily_1900_2000.parquet'
+# datetime.today() - datetime(2005,12,31)
+
 END_DATE_ = str(datetime.today() + timedelta(days=2))
-#datetime.timestamp(end_date)
-#datetime.utcnow().timestamp()
-def build_url(ticker, start_date = None, end_date = None, interval = "1d"):
-    base_url = "https://query1.finance.yahoo.com/v8/finance/chart/"
+START_DATE = str(datetime.today() + timedelta(days=-startdays))
 
-    if interval not in ("1d", "1wk", "1mo", "1m",'60m','1h'):
-        raise AssertionError("interval must be of of '1d', '1wk', '1mo', or '1m'")
+# END_DATE_ = '1999-12-31'
+# START_DATE = '1900-12-31'
 
-    if end_date is None:  
-        end_seconds = int(pd.Timestamp("now").timestamp())
-        
-    else:
-        end_seconds = int(pd.Timestamp(end_date).timestamp())
-        
-    if start_date is None:
-        start_seconds = 7223400    
-        
-    else:
-        start_seconds = int(pd.Timestamp(start_date).timestamp())
+engine = create_engine(f'postgresql+psycopg2://{db.user}:{db.password}@{db.raspberry}')
+
+#if market_open():
+start_time = time.time()
+print('start loading..')
+df = asyncio.run(main_yahoo(get_stocklist(stocks), INTERVAL_=interval, START_DATE_=START_DATE, END_DATE_=END_DATE_,
+                            export_path=exportpath, tblname=tblname, prep=prep, filter_hour=True))
+print("--- %s seconds ---" % (time.time() - start_time))    
     
-    site = base_url + ticker
+"""
+df = asyncio.run(main_yahoo(['APPS','MGNI'], INTERVAL_=interval, START_DATE_=START_DATE,END_DATE_=END_DATE_,
+                                        export_path=None, tblname=None, prep=None, filter_hour=False))
+
+df = asyncio.run(main_yahoo(['APPS','MGNI'], INTERVAL_=interval, START_DATE_=START_DATE,END_DATE_=END_DATE_,
+                                        export_path=None, tblname=None, prep=False, filter_hour=False))
+df['change'] = df.groupby('symbol')['adj_close'].transform(lambda x: x.pct_change())                                      
+last = df.groupby('symbol').last()
+last.to_sql('yahoo_latest', con=engine, if_exists='append',chunksize=1000, method='multi', index=True)
+"""
+"""
+pandabase.to_sql(df.head(200), table_name='yahoo_hourly_test22', con=engine, how='upsert', auto_index=False, add_new_columns=True)
+
+df = pd.read_parquet('./data/yahoo_2020_2022_1h_2.parquet')
+
+aapl = si.get_data("aapl",interval='1m', start_date='2022-04-19', end_date='2022-04-22')
+asyncio.run(main_yahoo(get_stocklist('sp500'), INTERVAL_='1m', START_DATE_=START, END_DATE_= END_DATE_, export_path='./data/yahoo_2020_2022_1m.parquet'))
+
+
+df.tail(100).to_sql('yahoo_hourly_2', con=engine)
+
+
+, DocsExampleTable
+
+df.index = range(0,df.shape[0])
+df.index.name = 'test'
+ # default
+
+df = pd.read_parquet('./data/yahoo_2020_2022_1m.parquet')
+len(df.ticker.unique())
+start_time = time.time()
+engine = create_engine('postgresql+psycopg2://tradekit:yourpassword@127.0.0.1')
+df.head(1).to_sql(name='yahoo_hourly_test2',con=engine,if_exists='append',method='multi',index=False)
+
+
+df = get_daily_fast('./data/yahoo_2020_2022_1m.parquet',type_='long')
+df.to_csv('./data/yahoo_2020_2022_1d.csv')
+print("--- %s seconds ---" % (time.time() - start_time))     
+from talib import *
+import talib
+from talib_pattern import candlestick_patterns
+
+for pattern in candlestick_patterns:
+    pattern_function = getattr(talib, pattern)
+    df[pattern.lower()] = pattern_function(df['open'], df['high'], df['low'], df['close'])
     
-    params = {"period1": start_seconds, "period2": end_seconds,
-              "interval": interval.lower(), "events": "div,splits"}
-    
-    return site, params
+"""
+"""
+yahoo_fin = ()
+import yfinance as yf
+aapl = yf.Ticker('AAPL')
+test = aapl.history(period='1y', interval='1h')
+df2 = pd.read_parquet('./data/yahoo_2020_2022_1h.parquet')
+df2['date'] = pd.to_datetime(df2.index.date)
+df2['time'] = df2.index.time
+first_hour = df2.groupby(['ticker',df2.date.dt.date]).first(1).reset_index()
+first_hour.ticker
+first_hour[first_hour.ticker=='ZY']['volume'].describe()
+symbols = df2.ticker.unique()
+
+stocklist = get_stocklist('all')
+stocklist = set(symbols) ^ set(stocklist)
+
+l = []
+for s in stocklist:
+    l.append(pdr.get_data_yahoo(ticker=s, interavl='1h', period='max'))
 
 
-async def get_yahoo(session, site, interval, index_as_date):
-    #print(site)
-    async with session.get(site) as resp:
-        await asyncio.sleep(0.5)
-        data = await resp.json()
-        #print(site)
-        global l_err
-        l_err = []
-        try:     
-            # get open / high / low / close data
-            frame = pd.DataFrame(data["chart"]["result"][0]["indicators"]["quote"][0])
-            #print(frame)
-            # get the date info
-            temp_time = data["chart"]["result"][0]["timestamp"]
+zyne = df[df.symbol.isin(['ZYNE','ZY'])]
 
-            if interval not in ["1m","60m","1h"]:
-                # add in adjclose
-                frame["adjclose"] = data["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"]   
-                frame.index = pd.to_datetime(temp_time, unit = "s", utc=False)
-                frame.index = frame.index.map(lambda dt: dt.floor("d"))
-                frame = frame[["open", "high", "low", "close", "adjclose", "volume"]]
-                    
-            else:
-                frame.index = pd.to_datetime(temp_time, unit = "s", utc=False)
-                frame = frame[["open", "high", "low", "close", "volume"]]
-                #print(frame)
-            ticker = site.split('/')[6:7]
-            ticker = ticker[0].split('?')[0]
-            
-            frame['ticker'] = ticker
-            if not index_as_date:  
-                frame = frame.reset_index()
-                frame.rename(columns = {"index": "date"}, inplace = True)
-        except:
-            frame = None
-            l_err.append(site)
-        return frame
-
-
-async def main_yahoo(stocklist, export_path = './data/yahoo_test.parquet', INTERVAL_='1d', START_DATE_='2021-01-01', END_DATE_=END_DATE_, index_as_date=True):
-
-
-    start_time = time.time()
-    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-
-    async with aiohttp.ClientSession() as session:
-    
-        tasks = []
-
-        print('No of symbols: ' + str(len(stocklist)))
-
-        for symbol in stocklist:#:
-            site, params = build_url(ticker=symbol, start_date=START_DATE_, end_date=END_DATE_, interval=INTERVAL_)
-            site += '?'
-            for k, v in params.items():
-                site += k +'='+str(v) +'&'
-            tasks.append(asyncio.ensure_future(get_yahoo(session, site, INTERVAL_, index_as_date)))
-
-        original_pokemon = await asyncio.gather(*tasks)
-
-        d = pd.concat(original_pokemon)
-        d.to_parquet(export_path)
-
-        """
-        if len(sys.argv)>1:
-            df = pd.concat([df,d])
-            df.to_parquet(sys.argv[1])
-            print(len(df.ticker.unique()))
-        else:
-            print(len(d.ticker.unique()))
-            d.to_parquet(sys.argv[0])
-        """  
-
-asyncio.run(main_yahoo(get_stocklist('all'), export_path='./data/yahoo_test_2021.parquet'))
-print("--- %s seconds ---" % (time.time() - start_time))
-
-
+df['signal'] = df[['symbol','low','high']].groupby('symbol').apply(lambda g: (g['low'] > g['low'].shift(1)) & (g['high'] < g['high'].shift(1))).reset_index().set_index('id').iloc[:,1]
+df['signal1'] = df[['symbol','low','high','signal']].groupby('symbol').apply(lambda g: (g['signal'].shift(1)==True) & \
+                                    (g['low'] > g['low'].shift(2)) & (g['high'] < g['high'].shift(2))).reset_index().set_index('id').iloc[:,1]
+df['signal2'] = df[['symbol','low','high','signal','signal1']].groupby('symbol').apply(lambda g: (g['signal'].shift(2)==True) & (g['signal1'].shift(1)==True) &
+                                    (g['low'] > g['low'].shift(3)) & (g['high'] < g['high'].shift(3))).reset_index().set_index('id').iloc[:,1]
+df['signal3'] = df[['symbol','low','high','signal','signal1','signal2']].groupby('symbol').apply(lambda g: (g['signal'].shift(3)==True) & (g['signal1'].shift(2)==True) & (g['signal2'].shift(1)==True) &
+                                    (g['low'] > g['low'].shift(4)) & (g['high'] < g['high'].shift(4))).reset_index().set_index('id').iloc[:,1]
+df['signal4'] = df[['symbol','low','high','signal','signal1','signal2','signal3']].groupby('symbol').apply(lambda g: (g['signal'].shift(4)==True) & (g['signal1'].shift(3)==True) & (g['signal2'].shift(2)==True) & (g['signal3'].shift(1)==True) &
+                                    (g['low'] > g['low'].shift(5)) & (g['high'] < g['high'].shift(5))).reset_index().set_index('id').iloc[:,1]
+df[(df.signal4==True) & (df.close>df['high'].shift(6))]
+"""
