@@ -506,7 +506,7 @@ def yagmail_send(subject, body, receiver="h.guessmann@gmail.com"):
     body = body
     #filename = "document.pdf"
 
-    yag = yagmail.SMTP(user="highco@gmail.com", password='hiphop-de')
+    yag = yagmail.SMTP(user="highco@gmail.com", password=input("Type your password and press enter: "))
     yag.send(
         to=receiver,
         subject=subject,
